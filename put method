@@ -1,0 +1,285 @@
+PUT belongs in the Edit/Save function, just like PATCH.
+
+We haven’t used it because our GearDesk API accepts PATCH for updates and currently does not support PUT.
+Method	Typical purpose
+POST	Create a record
+PUT	Replace a record’s representation with the supplied complete data
+PATCH	Update selected fields
+
+
+PUT’s replacement behavior is why you generally send the complete set of fields required by that API. MDN
+
+For an API that documents PUT, your Edit handler could contain:
+// updateUrl must be the endpoint documented by that API.
+const response = await fetch(updateUrl, {
+  method: "PUT",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: "Bearer " + token.value
+  },
+  body: JSON.stringify({
+    name: editName.value.trim(),
+    category_id: Number(editCategory.value),
+    daily_rate: Number(editRate.value),
+    available_units: Number(editUnits.value)
+  })
+});
+
+The modal’s HTML and CSS can stay the same. The request method, endpoint, and required payload follow the backend documentation.
+
+For the assessment: check whether Update specifies PUT, PATCH, or even POST, then implement that exact contract.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+what it there's a secret like api key?
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+You stopped after 0s
+
+
+
+I’ll check how Vite exposes environment values, then show where a private API key belongs and how a browser-approved key would be used.
+
+
+
+Reviewing Vite Environment Variables and Modes
+
+
+
+
+
+
+
+
+
+
+
+3+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+what it there's a secret like api key? 
+
+can you output html css and the js?
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Yes. First check whether the API key is intended for browser use.
+- Private server key: keep it in the backend’s environment configuration. Vue calls that backend.
+- Browser-approved key: your frontend can send it using the documented header.
+A VITE_* value is visible in the browser—even when stored in .env.local. It cannot hide a private secret. Vite
+
+Below is a small Vue example for a browser-approved key. It uses GearDesk’s endpoint and response format.
+
+1. Frontend .env.local
+VITE_API_BASE_URL=http://localhost/geardesk-api/index.php
+
+# Leave empty for our current GearDesk API.
+# Fill only with a key explicitly permitted for frontend use.
+VITE_PUBLIC_API_KEY=
+
+Restart Vite after changing this file.
+
+2. Example component — JavaScript, HTML, and CSS
+<script setup>
+import { ref } from "vue";
+import { token } from "../auth.js";
+
+const API_URL = import.meta.env.VITE_API_BASE_URL;
+const API_KEY = import.meta.env.VITE_PUBLIC_API_KEY;
+
+const equipment = ref([]);
+const loading = ref(false);
+const statusMessage = ref("");
+
+async function loadEquipment() {
+  if (loading.value) return;
+
+  loading.value = true;
+  statusMessage.value = "Loading equipment...";
+
+  try {
+    if (!API_URL) {
+      throw new Error("Configure the API URL first.");
+    }
+
+    const headers = {
+      Accept: "application/json"
+    };
+
+    // Include the login token when one exists.
+    if (token.value) {
+      headers.Authorization = "Bearer " + token.value;
+    }
+
+    // Example header name: use the API's documented name.
+    // Add this only for a browser-approved API key.
+    if (API_KEY) {
+      headers["X-API-Key"] = API_KEY;
+    }
+
+    const response = await fetch(
+      API_URL + "?resource=equipment&page=1&per_page=5",
+      {
+        method: "GET",
+        headers
+      }
+    );
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        result.message ||
+        "Request failed. Check the API's authentication requirements."
+      );
+    }
+
+    // GearDesk places its records inside result.data.
+    if (!Array.isArray(result.data)) {
+      throw new Error("Unexpected API response format.");
+    }
+
+    equipment.value = result.data;
+    statusMessage.value = "Equipment loaded.";
+  } catch (error) {
+    statusMessage.value =
+      error.message || "Unable to connect to the API.";
+  } finally {
+    loading.value = false;
+  }
+}
+</script>
+
+<template>
+  <section class="api-example">
+    <h1>Equipment</h1>
+
+    <button
+      type="button"
+      :disabled="loading"
+      @click="loadEquipment"
+    >
+      {{ loading ? "Loading..." : "Load equipment" }}
+    </button>
+
+    <!-- Display messages without displaying the key itself. -->
+    <p role="status">{{ statusMessage }}</p>
+
+    <div v-if="equipment.length" class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Name</th>
+            <th scope="col">Category</th>
+            <th scope="col">Available units</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          <tr v-for="item in equipment" :key="item.id">
+            <td>{{ item.name }}</td>
+            <td>{{ item.category_name }}</td>
+            <td>{{ item.available_units }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</template>
+
+<style scoped>
+.api-example {
+  padding: 24px;
+  background: white;
+  color: #142d32;
+  border: 1px solid #dce7e4;
+  border-radius: 12px;
+}
+
+button {
+  padding: 10px 16px;
+  background: #087f74;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.table-container {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #dce7e4;
+}
+</style>
+
+For your existing Equipment page, the reusable part is the headers construction; retain your working pagination and search request.
+
+Our current GearDesk API doesn’t require an API key. Before adding one for another API, check its documentation for the exact header name, whether it also needs a Bearer token, and whether browser requests with that header are allowed.
